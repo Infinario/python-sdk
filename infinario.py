@@ -93,6 +93,11 @@ class SynchronousTransport(object):
         self._send(url, message)
 
 
+class WorkerData(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(**kwargs)
+
+
 class AsynchronousTransport(object):
     '''
     AsynchronousTransport is a buffered asynchronous transport using one lazy-initialized thread and requests.Session.
@@ -104,31 +109,32 @@ class AsynchronousTransport(object):
      ASYNC_BUFFER_TIMEOUT seconds.
     '''
 
+
     def __init__(self, target, session=None, logger=None):
         # any variables used by more than one thread shall be here
-        self._worker_data = {
-            'logger': logger,
-            'transport': SynchronousTransport(target=target, session=session, logger=logger),
-            'buffer': [],
-            'cv': threading.Condition(threading.Lock()),
-            'flush': False,
-            'stop': False
-        }
+        self._worker_data = WorkerData(
+            logger=logger,
+            transport=SynchronousTransport(target=target, session=session, logger=logger),
+            buffer=[],
+            cv=threading.Condition(threading.Lock()),
+            flush=False,
+            stop=False
+        )
         self._worker_running = False
 
     def send_and_receive(self, service, message, params={}):
-        return self._worker_data['transport'].send_and_receive(service, message, params)
+        return self._worker_data.transport.send_and_receive(service, message, params)
 
     def send_and_ignore(self, service, message):
         command = {'name': service, 'data': message, 'scheduled': time.time()}
         self._ensure_lazy_worker()
 
-        with self._worker_data['cv']:
-            self._worker_data['buffer'].append(command)
-            self._worker_data['cv'].notify()
+        with self._worker_data.cv:
+            self._worker_data.buffer.append(command)
+            self._worker_data.cv.notify()
 
     def _ensure_lazy_worker(self):
-        if self._worker_data['stop']:
+        if self._worker_data.stop:
             raise ValueError('The API is already closed')
         if self._worker_running:
             return
@@ -138,36 +144,36 @@ class AsynchronousTransport(object):
         class Worker(threading.Thread):
 
             def run(self):
-                data['cv'].acquire()
+                data.cv.acquire()
 
                 while True:
-                    size = len(data['buffer'])
-                    timeout_in = data['buffer'][0]['scheduled'] + ASYNC_BUFFER_TIMEOUT - time.time() if size > 0 else None
+                    size = len(data.buffer)
+                    timeout_in = data.buffer[0]['scheduled'] + ASYNC_BUFFER_TIMEOUT - time.time() if size > 0 else None
                     timeouted = timeout_in is not None and timeout_in < 0
 
-                    if data['flush'] or size > ASYNC_BUFFER_MAX_SIZE or timeouted:
+                    if data.flush or size > ASYNC_BUFFER_MAX_SIZE or timeouted:
                         self._send_bulk()
-                        if len(data['buffer']) == 0:
-                            data['flush'] = False
+                        if len(data.buffer) == 0:
+                            data.flush = False
                     else:
-                        if data['stop']:
+                        if data.stop:
                             break
-                        data['cv'].wait(timeout_in)
+                        data.cv.wait(timeout_in)
 
-                data['cv'].release()
+                data.cv.release()
 
             def _send_bulk(self):
-                indexes = range(len(data['buffer']))
+                indexes = range(len(data.buffer))
 
-                data['cv'].release()
+                data.cv.release()
 
                 leftovers, errors = [], []
-                results = data['transport'].send_and_receive('/bulk', data['buffer'])['results']
+                results = data.transport.send_and_receive('/bulk', data.buffer)['results']
 
-                data['cv'].acquire()
+                data.cv.acquire()
 
                 for i in indexes:
-                    command = data['buffer'][i]
+                    command = data.buffer[i]
                     status = results[i].get('status', 'missing') if i < len(results) else 'retry'
 
                     if status == 'ok':
@@ -179,26 +185,26 @@ class AsynchronousTransport(object):
 
                 for error in errors:
                     message = 'Infinario API bulk command failed with status {}'.format(error[1])
-                    if data['logger']:
-                        data['logger'].exception(message)
+                    if data.logger:
+                        data.logger.exception(message)
                     else:
                         raise ServiceUnavailable(message)
 
-                data['buffer'] = leftovers
+                data.buffer = leftovers
 
         Worker().start()
         self._worker_running = True
 
     def flush(self):
-        with self._worker_data['cv']:
-            self._worker_data['flush'] = True
-            self._worker_data['cv'].notify()
+        with self._worker_data.cv:
+            self._worker_data.flush = True
+            self._worker_data.cv.notify()
 
     def stop(self):
-        with self._worker_data['cv']:
-            self._worker_data['stop'] = True
-            self._worker_data['flush'] = True
-            self._worker_data['cv'].notify()
+        with self._worker_data.cv:
+            self._worker_data.stop = True
+            self._worker_data.flush = True
+            self._worker_data.cv.notify()
 
 
 class _InfinarioBase(object):

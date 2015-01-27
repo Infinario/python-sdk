@@ -41,7 +41,7 @@ You can also specify a dictionary of event properties to store
 with the event.
 
 ```python
-client.track('purchase', properties={'product': 'bottle', 'amount': 5})
+client.track('purchase', {'product': 'bottle', 'amount': 5})
 ```
 
 ## Updating customer properties
