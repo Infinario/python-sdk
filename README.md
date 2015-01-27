@@ -67,9 +67,9 @@ will return
 ## Transport types
 
 By default the client uses a simple non-buffered synchronous transport. The three available transport types are:
-* NullTransport - No requests, useful for disabling tracking in the Infinario constructor.
-* SynchronousTransport - Most operations are blocking for the time of a request to the Infinario API
-* AsynchronousTransport - Most operations are non-blocking (see the code for more information),
+* `NullTransport` - No requests, useful for disabling tracking in the Infinario constructor.
+* `SynchronousTransport` - Most operations are blocking for the time of a request to the Infinario API
+* `AsynchronousTransport` - Most operations are non-blocking (see the code for more information),
     buffered and using a single worker thread. Infinario client must be closed when no more data is to be tracked.
 
 Example of choosing a transport:
@@ -77,7 +77,8 @@ Example of choosing a transport:
 ```python
 from infinario import Infinario, AsynchronousTransport
 
-client = Infinario('12345678-90ab-cdef-1234-567890abcdef', transport=AsynchronousTransport)
+client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
+                   transport=AsynchronousTransport)
 
 # ...
 
