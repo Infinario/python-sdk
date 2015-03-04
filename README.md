@@ -119,8 +119,7 @@ client = AuthenticatedInfinario('username', 'password')
 ## Exporting analyses
 
 First argument is type of analysis (funnel, report, retention, segmentation),
-second argument is JSON in format documented at http://guides.infinario.com/technical-guide/export-api/
-In case that authenticated customer has access to multiple companies use keyword argument
+second argument is JSON. In case that authenticated customer has access to multiple companies use keyword argument
 `token=token_of_company_with_given_analysis`
 
 ```python
