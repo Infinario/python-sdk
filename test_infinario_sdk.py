@@ -23,7 +23,7 @@ class TestInfinarioSDK(unittest.TestCase):
     def _pop_post_calls(self, mock):
         calls = []
         for call in [call for call in mock.mock_calls if call[0] == '().post']:
-            match = re.match('^nope/(.*)$', call[1][0])
+            match = re.match('^https://nope/(.*)$', call[1][0])
             self.assertTrue(match)
             self.assertEquals({'Content-type': 'application/json'}, call[2]['headers'])
             calls.append((match.group(1), json.loads(call[2]['data'])))
@@ -46,7 +46,7 @@ class TestInfinarioSDK(unittest.TestCase):
     # testing unidentified track, identify, identified track, update and identify at init with simple sync transport
     @patch.object(requests, 'Session')
     def test_synchronous_transport(self, session_mock):
-        infinario = Infinario('t', target='nope/', transport=SynchronousTransport)
+        infinario = Infinario('t', target='//nope', transport=SynchronousTransport)
         infinario.track('e1', {'prop1': 'val'})
         infinario.identify(customer='joe', properties={'prop2': 'val'})
         infinario.track('e2')
