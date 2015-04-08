@@ -3,13 +3,18 @@
 The `infinario.Infinario` class provides access to the Infinario Python tracking API,
 supporting both synchronous and asynchronous modes.
 In order to track events, instantiate the class at least with your project token
-(you can get it when you log in to Infinario), for example:
+(can be found in Project Management in your Infinario account), for example:
 
 ```python
 from infinario import Infinario
 
-client = Infinario('12345678-90ab-cdef-1234-567890abcdef')
+client = Infinario('12345678-90ab-cdef-1234-567890abcdef')                  # PRODUCTION ENVIRONMENT
+# client = Infinario('12345678-90ab-cdef-1234-567890abcdef', silent=False)  # DEVELOPMENT ENVIRONMENT
 ```
+
+We recommend to set the `silent` parameter to `False` in a development environment, as it will cause the Infinario API
+to throw exceptions if something goes wrong. When left to the default value `True`, all errors will be logged
+(also see the `logger` parameter).
 
 
 ## Identifying the customer

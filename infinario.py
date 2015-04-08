@@ -3,6 +3,7 @@
 from __future__ import print_function
 import json
 import threading
+import re
 import requests
 from requests.exceptions import ConnectionError
 import logging
@@ -27,6 +28,10 @@ class InvalidRequest(Exception):
 
 
 class ServiceUnavailable(Exception):
+    pass
+
+
+class AuthenticationError(Exception):
     pass
 
 
@@ -59,38 +64,49 @@ class SynchronousTransport(object):
         self._target = target
         self._session = session or requests.Session()
 
-    def _send(self, service, message, params={}):
+    def _send(self, service, message, params={}, no_raise=False):
         try:
-            return self._session.post(
+            response = self._session.post(
                 '{}{}'.format(self._target, service),
                 data=json.dumps(message),
                 params=params,
                 headers={'Content-type': 'application/json'}
             )
         except ConnectionError as e:
-            if self._logger:
-                self._logger.exception('Failed connecting to Infinario API')
+            if no_raise:
+                return self._logger.exception('Failed connecting to Infinario API at the given target URL {}'
+                                              .format(self._target))
             else:
                 raise e
 
-    def send_and_receive(self, service, message, params={}):
-        response = self._send(service, message, params)
-
         if response.status_code == 401:
-            raise InvalidRequest({'message': response.text, 'code': 401})
+            if no_raise:
+                return self._logger.exception('Infinario API authentication failed')
+            else:
+                raise AuthenticationError(response.text)
 
         json_response = response.json()
 
-        if json_response['success']:
+        if json_response.get('success', False):
             return json_response
 
         if response.status_code == 500:
-            raise ServiceUnavailable()
+            if no_raise:
+                return self._logger.exception('Infinario API is not available or encountered an unknown error')
+            else:
+                raise ServiceUnavailable()
 
-        raise InvalidRequest(json_response['errors'])
+        errors = json_response.get('errors', [])
+        if no_raise:
+            return self._logger.exception('Infinario API request failed with errors: {}'.format(str(errors)))
+        else:
+            raise InvalidRequest(errors)
+
+    def send_and_receive(self, service, message, params={}):
+        return self._send(service, message, params, no_raise=False)  # always non-silent, as the result is used
 
     def send_and_ignore(self, url, message):
-        self._send(url, message)
+        self._send(url, message, no_raise=bool(self._logger))
 
 
 class _WorkerData(object):
@@ -108,7 +124,6 @@ class AsynchronousTransport(object):
     Asynchronous commands will be buffered up to ASYNC_BUFFER_MAX_SIZE of commands and will be flushed at most after
      ASYNC_BUFFER_TIMEOUT seconds.
     """
-
 
     def __init__(self, target, session=None, logger=None):
         # any variables used by more than one thread shall be here
@@ -163,7 +178,7 @@ class AsynchronousTransport(object):
                 data.cv.release()
 
             def _send_bulk(self):
-                indexes = range(len(data.buffer))
+                indices = range(len(data.buffer))
                 message = {'commands': data.buffer[:ASYNC_BUFFER_MAX_SIZE]}
 
                 data.cv.release()
@@ -173,7 +188,7 @@ class AsynchronousTransport(object):
 
                 data.cv.acquire()
 
-                for i in indexes:
+                for i in indices:
                     command = data.buffer[i]
                     status = results[i].get('status', 'missing') if i < len(results) else 'retry'
 
@@ -182,16 +197,15 @@ class AsynchronousTransport(object):
                     elif status == 'retry':
                         leftovers.append(command)
                     else:
-                        errors.append((command, status))
+                        errors.append('Infinario API bulk command failed with status {}, errors: {}'.format(
+                            status, str(results[i].get('errors', []))
+                        ))
 
-                for error in errors:
-                    message = 'Infinario API bulk command failed with status {}, errors: {}'.format(
-                        error[1], '. '.join(results[i].get('errors', []))
-                    )
+                for message in errors:
                     if data.logger:
                         data.logger.exception(message)
                     else:
-                        raise ServiceUnavailable(message)
+                        raise ServiceUnavailable(message)  # die after the first exception
 
                 data.buffer = leftovers
 
@@ -211,9 +225,12 @@ class AsynchronousTransport(object):
 
 
 class _InfinarioBase(object):
-
     def __init__(self, target=None):
-        self._target = DEFAULT_TARGET if target is None else target
+        if target:
+            match = re.match('^((?:(?:https?:)?//)?)(.*?)(/?)$', target)  # will always match
+            self._target = 'https://{}/'.format(match.group(2))
+        else:
+            self._target = DEFAULT_TARGET
 
 
 class AuthenticatedInfinario(_InfinarioBase):
