@@ -76,26 +76,27 @@ class TestInfinarioSDK(unittest.TestCase):
 
         # flush
         infinario = Infinario('t', target='nope/', transport=AsynchronousTransport)
-        infinario.track('e1')
-        infinario.flush()
+        try:
+            infinario.track('e1')
+            infinario.flush()
 
-        time.sleep(0.2)
-        self._assert_bulk_events(session_mock, [1], 'e1')
+            time.sleep(0.2)
+            self._assert_bulk_events(session_mock, [1], 'e1')
 
-        # full buffer, will 2x push 20 through, attempts max 50
-        for _ in range(80):
-            infinario.track('e2')
+            # full buffer, will 2x push 20 through, attempts max 50
+            for _ in range(80):
+                infinario.track('e2')
 
-        time.sleep(0.2)
-        self._assert_bulk_events(session_mock, [50, 50], 'e2')
+            time.sleep(0.2)
+            self._assert_bulk_events(session_mock, [50, 50], 'e2')
 
-        # timeout, again 2x 20
-        time.sleep(1.1)
-        self._assert_bulk_events(session_mock, [40, 20], 'e2')
+            # timeout, again 2x 20
+            time.sleep(1.1)
+            self._assert_bulk_events(session_mock, [40, 20], 'e2')
+        finally:
+            # close
+            infinario.track('e3')
+            infinario.close()
 
-        # close
-        infinario.track('e3')
-        infinario.close()
-
-        time.sleep(0.2)
-        self._assert_bulk_events(session_mock, [1], 'e3')
+            time.sleep(0.2)
+            self._assert_bulk_events(session_mock, [1], 'e3')
