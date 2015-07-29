@@ -67,14 +67,14 @@ class SynchronousTransport(object):
     def _send(self, service, message, params={}, no_raise=False):
         try:
             response = self._session.post(
-                '{}{}'.format(self._target, service),
+                '{0}{1}'.format(self._target, service),
                 data=json.dumps(message),
                 params=params,
                 headers={'Content-type': 'application/json'}
             )
         except ConnectionError as e:
             if no_raise:
-                return self._logger.exception('Failed connecting to Infinario API at the given target URL {}'
+                return self._logger.exception('Failed connecting to Infinario API at the given target URL {0}'
                                               .format(self._target))
             else:
                 raise e
@@ -98,7 +98,7 @@ class SynchronousTransport(object):
 
         errors = json_response.get('errors', [])
         if no_raise:
-            return self._logger.exception('Infinario API request failed with errors: {}'.format(str(errors)))
+            return self._logger.exception('Infinario API request failed with errors: {0}'.format(str(errors)))
         else:
             raise InvalidRequest(errors)
 
@@ -197,7 +197,7 @@ class AsynchronousTransport(object):
                     elif status == 'retry':
                         leftovers.append(command)
                     else:
-                        errors.append('Infinario API bulk command failed with status {}, errors: {}'.format(
+                        errors.append('Infinario API bulk command failed with status {0}, errors: {1}'.format(
                             status, str(results[i].get('errors', []))
                         ))
 
@@ -228,7 +228,7 @@ class _InfinarioBase(object):
     def __init__(self, target=None):
         if target:
             match = re.match('^((?:(?:https?:)?//)?)(.*?)(/?)$', target)  # will always match
-            self._target = 'https://{}/'.format(match.group(2))
+            self._target = 'https://{0}/'.format(match.group(2))
         else:
             self._target = DEFAULT_TARGET
 
@@ -259,7 +259,7 @@ class AuthenticatedInfinario(_InfinarioBase):
         """
         params = {} if token is None else {'project': token}
         return self._transport.send_and_receive(
-            'analytics/{}'.format(analysis_type),
+            'analytics/{0}'.format(analysis_type),
             data, params
         )
 
