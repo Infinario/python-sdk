@@ -233,10 +233,15 @@ class AsynchronousTransport(object):
 
 
 class _InfinarioBase(object):
-    def __init__(self, target=None):
+    def __init__(self, target=None, logger=None):
         if target:
-            match = re.match('^((?:(?:https?:)?//)?)(.*?)(/?)$', target)  # will always match
-            self._target = 'https://{0}/'.format(match.group(2))
+            match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
+            if not match:
+                if logger:
+                    logger.error('Invalid Infinario target URL {0}'.format(target))
+                else:
+                    raise ValueError('Invalid target URL {0}'.format(target))
+            self._target = '{0}//{1}/'.format(match.group(1) or 'https:', match.group(2))
         else:
             self._target = DEFAULT_TARGET
 
@@ -252,7 +257,7 @@ class AuthenticatedInfinario(_InfinarioBase):
         :param password: Password for the account above
         :param target: Tracking API URL
         """
-        super(AuthenticatedInfinario, self).__init__(target)
+        super(AuthenticatedInfinario, self).__init__(target, None)
         session = requests.Session()
         session.auth = (username, password)
         self._transport = SynchronousTransport(target=self._target, session=session, logger=None)
@@ -287,10 +292,11 @@ class Infinario(_InfinarioBase):
         :param transport: One of `NullTransport`, `SynchronousTransport`, `AsynchronousTransport`;
             consult their documentation as well
         """
-        super(Infinario, self).__init__(target)
+        logger = logger or DEFAULT_LOGGER if silent else None
+        super(Infinario, self).__init__(target, logger)
         self._token = token
         self._customer = self._convert_customer_argument(customer)
-        self._logger = logger or DEFAULT_LOGGER if silent else None
+        self._logger = logger
         self._transport = transport(target=self._target, logger=self._logger)
 
     def identify(self, customer=None, properties=None):
