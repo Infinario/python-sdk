@@ -70,6 +70,7 @@ class TestInfinarioSDK(unittest.TestCase):
         self.assertEquals(expected, self._pop_post_calls(session_mock))
 
     # testing async transport - flush, buffer fill, timeout and close
+    @unittest.skip("This test uses sleep() which means that it fails randomly. Skip it until it is fixed.")
     @patch.object(requests, 'Session')
     def test_asynchronous_transport(self, session_mock):
         session_mock().post.side_effect = _fake_post_response
