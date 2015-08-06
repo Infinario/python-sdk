@@ -51,6 +51,16 @@ with the event.
 client.track('purchase', {'product': 'bottle', 'amount': 5})
 ```
 
+Specify the POSIX timestamp of the event using:
+
+```python
+timestamp = time.time()
+
+# .. time passes ..
+
+client.track('purchase', timestamp=timestamp)
+```
+
 ## Updating customer properties
 
 You can also update information that is stored with a customer.
