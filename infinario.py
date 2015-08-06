@@ -306,18 +306,21 @@ class Infinario(_InfinarioBase):
             'properties': properties
         })
 
-    def track(self, event_type, properties=None):
+    def track(self, event_type, properties=None, timestamp=None):
         """
         Track an event for the currently identified customer.
         :param event_type: Type of the event to track.
         :param properties: Optional dictionary of properties
         """
-        self._transport.send_and_ignore('crm/events', {
+        data = {
             'customer_ids': self._customer,
             'project_id': self._token,
             'type': event_type,
             'properties': {} if properties is None else properties
-        })
+        }
+        if timestamp is not None:
+            data['timestamp'] = self._convert_timestamp_argument(timestamp)
+        self._transport.send_and_ignore('crm/events', data)
 
     def get_html(self, html_campaign_name):
         """
@@ -355,6 +358,17 @@ class Infinario(_InfinarioBase):
         elif isinstance(customer, dict):
             return customer
         raise ValueError('Attribute customer should be None, string or dict')
+
+    @staticmethod
+    def _convert_timestamp_argument(timestamp):
+        if timestamp is None:
+            return None
+        elif isinstance(timestamp, (int, float)):
+            return timestamp
+        elif hasattr(timestamp, 'timestamp'):
+            return timestamp.timestamp()
+        else:
+            raise ValueError('Cannot convert {0!r} to timestamp'.format(timestamp))
 
 
 def _add_common_arguments(parser):

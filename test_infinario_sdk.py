@@ -105,3 +105,23 @@ class TestInfinarioSDK(unittest.TestCase):
 
             time.sleep(0.2)
             self._assert_bulk_events(session_mock, [1], 'e3')
+
+
+class TestConvertTimestampArgument(unittest.TestCase):
+    def test_int(self):
+        self.assertEquals(Infinario._convert_timestamp_argument(10), 10)
+
+    def test_float(self):
+        self.assertEquals(Infinario._convert_timestamp_argument(10.1), 10.1)
+
+    def test_with_timestamp_method(self):
+        m = MagicMock()
+        m.timestamp = MagicMock(return_value=123)
+
+        self.assertEquals(Infinario._convert_timestamp_argument(m), 123)
+
+        m.timestamp.assert_called_once_with()
+
+    def test_other(self):
+        with self.assertRaisesRegex(ValueError, 'Cannot convert \'a string\' to timestamp'):
+            Infinario._convert_timestamp_argument('a string')
