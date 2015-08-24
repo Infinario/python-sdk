@@ -87,23 +87,23 @@ class SynchronousTransport(object):
     def _send(self, service, message, no_raise=False, timeout=None):
         try:
             response = self._session.post(
-                u'{0}{1}'.format(self._target, service),
+                u('{0}{1}').format(self._target, service),
                 data=json.dumps(message),
                 headers={'Content-type': 'application/json'},
                 timeout=timeout,
             )
         except ConnectionError:
             return self._errors.handle(
-                u'Failed connecting to Infinario API at the given target URL {0}'.format(self._target),
+                u('Failed connecting to Infinario API at the given target URL {0}').format(self._target),
                 ServiceUnavailable, no_raise=no_raise)
         except Timeout:
             return self._errors.handle(
-                u'Infinario request to {0} failed to complete within timeout {1}'.format(service, timeout),
+                u('Infinario request to {0} failed to complete within timeout {1}').format(service, timeout),
                 ServiceUnavailable, no_raise=no_raise)
 
         if response.status_code == 401:
             return self._errors.handle(
-                u'Infinario API authentication failure',
+                u('Infinario API authentication failure'),
                 AuthenticationError, no_raise=no_raise)
 
         json_response = response.json()
@@ -115,11 +115,11 @@ class SynchronousTransport(object):
 
         if response.status_code in (503, 504):
             return self._errors.handle(
-                u'Infinario API is currently unavailable or under too much load: {0}'.format(errors),
+                u('Infinario API is currently unavailable or under too much load: {0}').format(errors),
                 ServiceUnavailable, no_raise=no_raise)
 
         return self._errors.handle(
-            u'Infinario API request failed with errors: {0}'.format(errors),
+            u('Infinario API request failed with errors: {0}').format(errors),
             InvalidRequest, no_raise=no_raise)
 
     def send_and_receive(self, service, message, no_raise=False, timeout=None):
@@ -265,7 +265,7 @@ class Infinario(object):
         if target:
             match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
             if not match:
-                errors.handle(ValueError, u'Invalid Infinario target URL {0}'.format(target))
+                errors.handle(ValueError, u('Invalid Infinario target URL {0}').format(target))
             self._target = '{0}//{1}/'.format(match.group(1) or 'https:', match.group(2))
         else:
             self._target = DEFAULT_TARGET
