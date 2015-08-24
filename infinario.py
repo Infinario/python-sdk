@@ -43,6 +43,19 @@ class AuthenticationError(Exception):
     pass
 
 
+class ErrorHandler(object):
+    def __init__(self, silent=False, logger=None):
+        self._silent = silent
+        self._logger = logger or DEFAULT_LOGGER
+
+    def handle(self, exception_cls, error_message, no_raise=False):
+        if self._silent or no_raise:
+            self._logger.error(error_message)
+            return
+        else:
+            raise exception_cls(error_message)
+
+
 class NullTransport(object):
     """
     NullTransport will make no requests.
@@ -53,10 +66,10 @@ class NullTransport(object):
     def __init__(self, *_args, **_kwargs):
         pass
 
-    def send_and_receive(self, url, message):
+    def send_and_receive(self, url, message, no_raise=False, timeout=None):
         pass
 
-    def send_and_ignore(self, url, message):
+    def send_and_ignore(self, url):
         pass
 
 
@@ -67,40 +80,32 @@ class SynchronousTransport(object):
     Infinario methods identify, track, update and get_html will block for the whole time of a request.
     """
 
-    def __init__(self, target, session=None, logger=None):
-        self._logger = logger
+    def __init__(self, target, errors, session=None):
+        self._errors = errors
         self._target = target
         self._session = session or requests.Session()
 
-    def _send(self, service, message, params={}, no_raise=False, timeout=None):
-        def process_error(exception, error_string):
-            if no_raise:
-                if self._logger:
-                    self._logger.error(error_string)
-                return
-            else:
-                raise exception(error_string)
-
+    def _send(self, service, message, no_raise=False, timeout=None):
         try:
             response = self._session.post(
                 u'{0}{1}'.format(self._target, service),
                 data=json.dumps(message),
-                params=params,
                 headers={'Content-type': 'application/json'},
                 timeout=timeout,
             )
         except ConnectionError:
-            return process_error(ServiceUnavailable,
-                                 u'Failed connecting to Infinario API at the given target URL {0}'
-                                 .format(self._target))
+            return self._errors.handle(
+                u'Failed connecting to Infinario API at the given target URL {0}'.format(self._target),
+                ServiceUnavailable, no_raise=no_raise)
         except Timeout:
-            return process_error(ServiceUnavailable,
-                                 u'Infinario request to {0} failed to complete within timeout {1}'
-                                 .format(service, timeout))
+            return self._errors.handle(
+                u'Infinario request to {0} failed to complete within timeout {1}'.format(service, timeout),
+                ServiceUnavailable, no_raise=no_raise)
 
         if response.status_code == 401:
-            return process_error(AuthenticationError,
-                                 u'Infinario API authentication failure')
+            return self._errors.handle(
+                u'Infinario API authentication failure',
+                AuthenticationError, no_raise=no_raise)
 
         json_response = response.json()
 
@@ -110,18 +115,20 @@ class SynchronousTransport(object):
         errors = json_response.get('errors', None) or response.text
 
         if response.status_code in (503, 504):
-            return process_error(ServiceUnavailable,
-                                 u'Infinario API is currently unavailable or under too much load: {0}'.format(errors))
+            return self._errors.handle(
+                u'Infinario API is currently unavailable or under too much load: {0}'.format(errors),
+                ServiceUnavailable, no_raise=no_raise)
 
-        return process_error(InvalidRequest,
-                             u'Infinario API request failed with errors: {}'.format(errors))
+        return self._errors.handle(
+            u'Infinario API request failed with errors: {}'.format(errors),
+            InvalidRequest, no_raise=no_raise)
 
-    def send_and_receive(self, service, message, params={}, no_raise=False, timeout=None):
+    def send_and_receive(self, service, message, no_raise=False, timeout=None):
         # always non-silent, as the result is used
-        return self._send(service, message, params, no_raise=no_raise, timeout=timeout)
+        return self._send(service, message, no_raise=no_raise, timeout=timeout)
 
     def send_and_ignore(self, url, message):
-        self._send(url, message, no_raise=bool(self._logger))
+        self._send(url, message)
 
 
 class _WorkerData(object):
@@ -140,11 +147,11 @@ class AsynchronousTransport(object):
      ASYNC_BUFFER_TIMEOUT seconds.
     """
 
-    def __init__(self, target, session=None, logger=None):
+    def __init__(self, target, errors, session=None):
         # any variables used by more than one thread shall be here
         self._worker_data = _WorkerData(
-            logger=logger,
-            transport=SynchronousTransport(target=target, session=session, logger=logger),
+            errors=errors,
+            transport=SynchronousTransport(target, errors, session=session),
             buffer=[],
             cv=threading.Condition(threading.Lock()),
             flush=False,
@@ -152,9 +159,8 @@ class AsynchronousTransport(object):
         )
         self._worker_running = False
 
-    def send_and_receive(self, service, message, params={}, no_raise=False, timeout=None):
-        return self._worker_data.transport.send_and_receive(service, message, params,
-                                                            no_raise=no_raise, timeout=timeout)
+    def send_and_receive(self, service, message, no_raise=False, timeout=None):
+        return self._worker_data.transport.send_and_receive(service, message, no_raise=no_raise, timeout=timeout)
 
     def send_and_ignore(self, service, message):
         command = {'name': service, 'data': message, 'scheduled': time.time()}
@@ -218,10 +224,7 @@ class AsynchronousTransport(object):
                         ))
 
                 for message in errors:
-                    if data.logger:
-                        data.logger.error(message)
-                    else:
-                        raise ServiceUnavailable(message)  # die after the first exception
+                    data.errors.handle(message, ServiceUnavailable)  # die after the first exception
 
                 data.buffer = leftovers
 
@@ -240,23 +243,10 @@ class AsynchronousTransport(object):
             self._worker_data.cv.notify()
 
 
-class _InfinarioBase(object):
-    def __init__(self, target=None, logger=None):
-        if target:
-            match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
-            if not match:
-                if logger:
-                    logger.error('Invalid Infinario target URL {0}'.format(target))
-                else:
-                    raise ValueError('Invalid target URL {0}'.format(target))
-            self._target = '{0}//{1}/'.format(match.group(1) or 'https:', match.group(2))
-        else:
-            self._target = DEFAULT_TARGET
-
-
-class Infinario(_InfinarioBase):
+class Infinario(object):
     """
     Infinario API access for tracking events, updating customer data and requesting campaign data.
+    If the secret argument is passed, it also allows exporting analyses.
     """
 
     def __init__(self, token,
@@ -271,15 +261,21 @@ class Infinario(_InfinarioBase):
             consult their documentation as well
         :param secret: (optional) Secret token of a project with analyses for `export_analysis` or `get_segment`
         """
-        logger = logger or DEFAULT_LOGGER if silent else None
-        super(Infinario, self).__init__(target, logger)
+        errors = ErrorHandler(silent, logger)
+        self._error_handler = errors
+        if target:
+            match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
+            if not match:
+                errors.handle(ValueError, u'Invalid Infinario target URL {0}'.format(target))
+            self._target = '{}//{}/'.format(match.group(1) or 'https:', match.group(2))
+        else:
+            self._target = DEFAULT_TARGET
         self._token = token
         self._customer = self._convert_customer_argument(customer)
-        self._logger = logger
         session = requests.Session()
         if secret:
             session.headers.update({'X-Infinario-Secret': secret})
-        self._transport = transport(target=self._target, session=session, logger=logger)
+        self._transport = transport(self._target, errors, session=session)
 
     def identify(self, customer=None, properties=None):
         """
