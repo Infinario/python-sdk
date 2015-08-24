@@ -10,11 +10,18 @@ import logging
 import time
 
 
-# Python 2/3 compatibility fix
+# Python 2/3 compatibility fixes
+import sys
+
 try:
     basestring = basestring
 except NameError:
     basestring = (str, bytes)
+
+if sys.version < '3':
+    u = lambda string: unicode(string)
+else:
+    u = lambda string: string
 
 
 DEFAULT_TARGET = 'https://api.infinario.com/'
@@ -112,7 +119,7 @@ class SynchronousTransport(object):
                 ServiceUnavailable, no_raise=no_raise)
 
         return self._errors.handle(
-            u'Infinario API request failed with errors: {}'.format(errors),
+            u'Infinario API request failed with errors: {0}'.format(errors),
             InvalidRequest, no_raise=no_raise)
 
     def send_and_receive(self, service, message, no_raise=False, timeout=None):
@@ -258,8 +265,8 @@ class Infinario(object):
         if target:
             match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
             if not match:
-                errors.handle(ValueError, u'Invalid Infinario target URL {}'.format(target))
-            self._target = '{}//{}/'.format(match.group(1) or 'https:', match.group(2))
+                errors.handle(ValueError, u'Invalid Infinario target URL {0}'.format(target))
+            self._target = '{0}//{1}/'.format(match.group(1) or 'https:', match.group(2))
         else:
             self._target = DEFAULT_TARGET
         self._token = token
@@ -326,7 +333,7 @@ class Infinario(object):
         :param analysis_type: funnel/report/retention/segmentation
         :param data: See http://guides.infinario.com/technical-guide/export-api/
         """
-        return self._transport.send_and_receive('analytics/{}'.format(analysis_type), data)
+        return self._transport.send_and_receive('analytics/{0}'.format(analysis_type), data)
 
     def get_segment(self, segmentation_id, timezone='UTC', timeout=0.5):
         """
