@@ -5,7 +5,7 @@ import json
 import threading
 import re
 import requests
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, Timeout
 import logging
 import time
 
@@ -64,46 +64,53 @@ class SynchronousTransport(object):
         self._target = target
         self._session = session or requests.Session()
 
-    def _send(self, service, message, params={}, no_raise=False):
+    def _send(self, service, message, params={}, no_raise=False, timeout=None):
+        def process_error(exception, error_string):
+            if no_raise:
+                if self._logger:
+                    self._logger.error(error_string)
+                return
+            else:
+                raise exception(error_string)
+
         try:
             response = self._session.post(
-                '{0}{1}'.format(self._target, service),
+                u'{0}{1}'.format(self._target, service),
                 data=json.dumps(message),
                 params=params,
-                headers={'Content-type': 'application/json'}
+                headers={'Content-type': 'application/json'},
+                timeout=timeout,
             )
-        except ConnectionError as e:
-            if no_raise:
-                return self._logger.exception('Failed connecting to Infinario API at the given target URL {0}'
-                                              .format(self._target))
-            else:
-                raise e
+        except ConnectionError:
+            return process_error(ServiceUnavailable,
+                                 u'Failed connecting to Infinario API at the given target URL {0}'
+                                 .format(self._target))
+        except Timeout:
+            return process_error(ServiceUnavailable,
+                                 u'Infinario request to {0} failed to complete within timeout {1}'
+                                 .format(service, timeout))
 
         if response.status_code == 401:
-            if no_raise:
-                return self._logger.exception('Infinario API authentication failed')
-            else:
-                raise AuthenticationError(response.text)
+            return process_error(AuthenticationError,
+                                 u'Infinario API authentication failure')
 
         json_response = response.json()
 
         if json_response.get('success', False):
             return json_response
 
-        if response.status_code == 500:
-            if no_raise:
-                return self._logger.exception('Infinario API is not available or encountered an unknown error')
-            else:
-                raise ServiceUnavailable()
+        errors = json_response.get('errors', None) or response.text
 
-        errors = json_response.get('errors', [])
-        if no_raise:
-            return self._logger.exception('Infinario API request failed with errors: {0}'.format(str(errors)))
-        else:
-            raise InvalidRequest(errors)
+        if response.status_code in (503, 504):
+            return process_error(ServiceUnavailable,
+                                 u'Infinario API is currently unavailable or under too much load: {0}'.format(errors))
 
-    def send_and_receive(self, service, message, params={}):
-        return self._send(service, message, params, no_raise=False)  # always non-silent, as the result is used
+        return process_error(InvalidRequest,
+                             u'Infinario API request failed with errors: {}'.format(errors))
+
+    def send_and_receive(self, service, message, params={}, no_raise=False, timeout=None):
+        # always non-silent, as the result is used
+        return self._send(service, message, params, no_raise=no_raise, timeout=timeout)
 
     def send_and_ignore(self, url, message):
         self._send(url, message, no_raise=bool(self._logger))
@@ -137,8 +144,9 @@ class AsynchronousTransport(object):
         )
         self._worker_running = False
 
-    def send_and_receive(self, service, message, params={}):
-        return self._worker_data.transport.send_and_receive(service, message, params)
+    def send_and_receive(self, service, message, params={}, no_raise=False, timeout=None):
+        return self._worker_data.transport.send_and_receive(service, message, params,
+                                                            no_raise=no_raise, timeout=timeout)
 
     def send_and_ignore(self, service, message):
         command = {'name': service, 'data': message, 'scheduled': time.time()}
@@ -203,7 +211,7 @@ class AsynchronousTransport(object):
 
                 for message in errors:
                     if data.logger:
-                        data.logger.exception(message)
+                        data.logger.error(message)
                     else:
                         raise ServiceUnavailable(message)  # die after the first exception
 
@@ -233,43 +241,13 @@ class _InfinarioBase(object):
             self._target = DEFAULT_TARGET
 
 
-class AuthenticatedInfinario(_InfinarioBase):
-    """
-    Authenticated Infinario API access for exporting analysis data.
-    """
-
-    def __init__(self, username, password, target=None):
-        """
-        :param username: Username for an Infinario account with ExtAPI access
-        :param password: Password for the account above
-        :param target: Tracking API URL
-        """
-        super(AuthenticatedInfinario, self).__init__(target)
-        session = requests.Session()
-        session.auth = (username, password)
-        self._transport = SynchronousTransport(target=self._target, session=session, logger=None)
-
-    def export_analysis(self, analysis_type, data, token=None):
-        """
-        Compute and obtain data from an existing Infinario analysis definition
-
-        :param analysis_type: funnel/report/retention/segmentation
-        :param data: See http://guides.infinario.com/technical-guide/export-api/
-        :param token: In case the Infinario account has access to multiple projects, specify the project token
-        """
-        params = {} if token is None else {'project': token}
-        return self._transport.send_and_receive(
-            'analytics/{0}'.format(analysis_type),
-            data, params
-        )
-
-
 class Infinario(_InfinarioBase):
     """
     Infinario API access for tracking events, updating customer data and requesting campaign data.
     """
 
-    def __init__(self, token, customer=None, target=None, silent=True, logger=None, transport=SynchronousTransport):
+    def __init__(self, token,
+                 customer=None, target=None, silent=True, logger=None, transport=SynchronousTransport, secret=None):
         """
         :param token: Project token to track data into.
         :param customer: Optional identifier of tracked customer (can later be done with method `identify`).
@@ -278,12 +256,16 @@ class Infinario(_InfinarioBase):
         :param logger: Instance of a logger used with silent == True
         :param transport: One of `NullTransport`, `SynchronousTransport`, `AsynchronousTransport`;
             consult their documentation as well
+        :param secret: Secret token of a project with analyses that should be exported
         """
         super(Infinario, self).__init__(target)
         self._token = token
         self._customer = self._convert_customer_argument(customer)
         self._logger = logger or DEFAULT_LOGGER if silent else None
-        self._transport = transport(target=self._target, logger=self._logger)
+        session = requests.Session()
+        if secret:
+            session.headers.update({'X-Infinario-Secret': secret})
+        self._transport = transport(target=self._target, session=session, logger=self._logger)
 
     def identify(self, customer=None, properties=None):
         """
@@ -334,6 +316,39 @@ class Infinario(_InfinarioBase):
             'html_campaign_name': html_campaign_name
         })
         return response['data']
+
+    def export_analysis(self, analysis_type, data):
+        """
+        Compute and the result of an existing analysis stored in Infinario in the project authenticated by secret
+
+        :param analysis_type: funnel/report/retention/segmentation
+        :param data: See http://guides.infinario.com/technical-guide/export-api/
+        """
+        return self._transport.send_and_receive('analytics/{}'.format(analysis_type), data)
+
+    def get_segment(self, segmentation_id, timezone='UTC', timeout=0.5):
+        """
+        Compute the result of a segmentation for the identified customer
+
+        :param segmentation_id: id of the segmentation already stored in the Infinario project authenticated by secret
+        :param timezone: optional, Olson TZ database string specifying the timezone, default UTC
+        :param timeout: optional, number of seconds to wait for the result, otherwise return None, default 0.5 seconds
+        :returns segment name string for the customer, None if could not be determined
+        """
+        try:
+            result = self._transport.send_and_receive('analytics/segmentation-for', {
+                'analysis_id': segmentation_id,
+                'customer_ids': self._customer,
+                'timezone': timezone,
+                'timeout': timeout,
+            }, no_raise=True, timeout=timeout)
+        except ServiceUnavailable:
+            return None
+
+        if not result or not isinstance(result, dict):
+            return None
+
+        return result.get('segment', None)
 
     def flush(self):
         """

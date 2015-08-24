@@ -7,7 +7,7 @@ else:
 import re
 import requests
 import time
-from infinario import Infinario, AuthenticatedInfinario, NullTransport, SynchronousTransport, AsynchronousTransport
+from infinario import Infinario, SynchronousTransport, AsynchronousTransport
 try:
     from mock import MagicMock, patch
 except ImportError:
