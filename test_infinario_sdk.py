@@ -50,7 +50,7 @@ class TestInfinarioSDK(unittest.TestCase):
     # testing unidentified track, identify, identified track, update and identify at init with simple sync transport
     @patch.object(requests, 'Session')
     def test_synchronous_transport(self, session_mock):
-        infinario = Infinario('t', target='//nope', transport=SynchronousTransport)
+        infinario = Infinario('t', target='//nope', transport=SynchronousTransport, secret='xyz')
         infinario.track('e1', {'prop1': 'val'})
         infinario.identify(customer='joe', properties={'prop2': 'val'})
         infinario.track('e2')
@@ -66,10 +66,13 @@ class TestInfinarioSDK(unittest.TestCase):
 
         infinario = Infinario('u', customer='john', target='nope/')
         infinario.track('e1', {'prop1': 'val'})
+        infinario.get_segment('123-456')
 
         expected = [
             ('crm/events',
-             {'customer_ids': {'registered': 'john'}, 'project_id': 'u', 'properties': {'prop1': 'val'}, 'type': 'e1'})
+             {'customer_ids': {'registered': 'john'}, 'project_id': 'u', 'properties': {'prop1': 'val'}, 'type': 'e1'}),
+            ('analytics/segmentation-for',
+             {'analysis_id': '123-456', 'customer_ids': {'registered': 'john'}, 'timeout': 0.5, 'timezone': 'UTC'})
         ]
         self.assertEquals(expected, self._pop_post_calls(session_mock))
 
