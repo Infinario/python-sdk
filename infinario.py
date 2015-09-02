@@ -55,7 +55,7 @@ class ErrorHandler(object):
         self._silent = silent
         self._logger = logger or DEFAULT_LOGGER
 
-    def handle(self, exception_cls, error_message, no_raise=False):
+    def handle(self, error_message, exception_cls, no_raise=False):
         if self._silent or no_raise:
             self._logger.error(error_message)
             return
@@ -273,7 +273,7 @@ class Infinario(object):
         if target:
             match = re.match('^(?:(https?:)?//)?([^/]+)(/*)$', target)
             if not match:
-                errors.handle(ValueError, u('Invalid Infinario target URL {0}').format(target))
+                errors.handle(u('Invalid Infinario target URL {0}').format(target), ValueError)
             self._target = '{0}//{1}/'.format(match.group(1) or 'https:', match.group(2))
         else:
             self._target = DEFAULT_TARGET
