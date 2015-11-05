@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
+
+__title__ = 'infinario'
+__version__ = '1.0.0'
+__author__ = 'Peter Dolak'
+__licence__ = 'Apache 2.0'
+__copyright__ = 'Copyright 2015 7Segments s r.o.'
+
+
 import json
 import threading
 import re
