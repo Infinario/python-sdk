@@ -7,6 +7,11 @@ Infinario Python SDK
 
 The `infinario.Infinario` class provides access to the Infinario Python tracking API,
 supporting both synchronous and asynchronous modes.
+
+You can install the SDK using `pip`::
+
+    pip install infinario
+
 In order to track events, instantiate the class at least with your project token
 (can be found in Project Management in your Infinario account), for example:
 
