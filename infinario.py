@@ -199,8 +199,8 @@ class AsynchronousTransport(object):
                 data.cv.release()
 
             def _send_bulk(self):
-                indices = range(len(data.buffer))
-                message = {'commands': data.buffer[:ASYNC_BUFFER_MAX_SIZE]}
+                selected = data.buffer[:ASYNC_BUFFER_MAX_SIZE]
+                message = {'commands': selected}
 
                 data.cv.release()
 
@@ -209,8 +209,7 @@ class AsynchronousTransport(object):
 
                 data.cv.acquire()
 
-                for i in indices:
-                    command = data.buffer[i]
+                for i, command in enumerate(selected):
                     status = results[i].get('status', 'missing') if i < len(results) else 'retry'
 
                     if status == 'ok':
@@ -225,7 +224,7 @@ class AsynchronousTransport(object):
                 for message in errors:
                     data.errors.handle(message, ServiceUnavailable)  # die after the first exception
 
-                data.buffer = leftovers
+                data.buffer = leftovers + data.buffer[ASYNC_BUFFER_MAX_SIZE:]
 
         Worker().start()
         self._worker_running = True
