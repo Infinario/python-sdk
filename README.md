@@ -144,11 +144,15 @@ The `timezone` and `timeout` parameters are optional with the defaults as in the
 
 By default the client uses a simple non-buffered synchronous transport. The three available transport types are:
 * `NullTransport` - No requests, useful for disabling tracking in the Infinario constructor.
-* `SynchronousTransport` - Most operations are blocking for the time of a request to the Infinario API
+* `SynchronousTransport` - (default) Most operations are blocking for the time of a request to the Infinario API
 * `AsynchronousTransport` - Most operations are non-blocking (see the code for more information),
-    buffered and using a single worker thread. Infinario client must be closed when no more data is to be tracked.
+    buffered and using a single worker thread. Infinario client must be closed when no more data is to be tracked. 
+    **We recommend against using the AsynchronousTransport, as it cannot be guaranteed the data will be sent.**
+    Data loss can for example happen in various events of system failure or even due to misuse.
+    If you would like to track data from your code asynchronously, consider creating your own asynchronous workers
+    using a library such as celery and use the SynchronousTransport to send the data from there.
 
-Example of choosing a transport:
+Example of choosing `AsynchronousTransport`:
 
 ```python
 from infinario import Infinario, AsynchronousTransport

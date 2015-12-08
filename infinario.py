@@ -135,6 +135,7 @@ class _WorkerData(object):
         self.__dict__.update(**kwargs)
 
 
+# DEPRECATED - we recommend against using this transport mode, we cannot guarantee all data will be sent
 class AsynchronousTransport(object):
     """
     AsynchronousTransport is a buffered asynchronous transport using one lazy-initialized thread and requests.Session.
