@@ -27,6 +27,15 @@ to throw exceptions if something goes wrong. When left to the default value `Tru
 (also see the `logger` parameter).
 
 
+To get results of existing analyses stored in your Infinario project, you need to initialize the client
+with the Infinario project secret (found in the Overview screen) as the `secret` keyword argument.
+
+.. code-block:: python
+
+    client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
+                       secret='fedcba09-8765-4321-fedc-ba0987654321')
+
+
 Identifying the customer
 ------------------------
 
@@ -92,74 +101,30 @@ will return::
 
     '<img src="/my-awesome-banner-1.png" />'
 
-Transport types
+
+Analysis export
 ---------------
 
-By default the client uses a simple non-buffered synchronous transport. The three available transport types are:
-* `NullTransport` - No requests, useful for disabling tracking in the Infinario constructor.
-* `SynchronousTransport` - Most operations are blocking for the time of a request to the Infinario API
-* `AsynchronousTransport` - Most operations are non-blocking (see the code for more information),
-    buffered and using a single worker thread. Infinario client must be closed when no more data is to be tracked.
-
-Example of choosing a transport:
+To export the entire result of an analysis, use the `export_analysis` client method.
+It is necessary to authenticate during initialization of the client (see above).
+First argument is type of analysis (funnel, report, retention, segmentation), second argument is JSON object
+containing at least the ID of the analysis to export.
+Optional parameters include `format` (one of `'native-json'` (default), `'table-json'`, `'csv'`),
+    `timezone` (according to the IANA time zone database, default `'UTC'`)
+    and `execution_time` (UNIX timestamp specifying the upper bound of events to include, default is now).
 
 .. code-block:: python
-
-    from infinario import Infinario, AsynchronousTransport
 
     client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
-                       transport=AsynchronousTransport)
+                       secret='fedcba09-8765-4321-fedc-ba0987654321')
 
-    # ...
-
-    client.close()
-
-Using on the command line
--------------------------
-
-The python client also has a command-line interface that allows to call its essential functions:
-
-.. code-block:: sh
-
-    TOKEN='12345678-90ab-cdef-1234-567890abcdef'
-    CUSTOMER='john123'
-
-    # Track event
-    ./infinario.py track "$TOKEN" "$CUSTOMER" purchase --properties product=bottle amount=5
-
-    # Update customer properties
-    ./infinario.py update "$TOKEN" "$CUSTOMER" first_name=John last_name=Smith
-
-    # Get HTML from campaign
-    ./infinario.py get_html "$TOKEN" "$CUSTOMER" "Banner left"
-
-Infinario Python Authenticated API client
-=========================================
-
-The `infinario.AuthenticatedInfinario` class provides access to the Infinario
-synchronous Python authenticated API. In order to export analyses you have to instantiate client
-with username and password of user that has ExtAPI access:
-
-.. code-block:: python
-
-    from infinario import AuthenticatedInfinario
-
-    client = AuthenticatedInfinario('username', 'password')
-
-Exporting analyses
-------------------
-
-First argument is type of analysis (funnel, report, retention, segmentation),
-second argument is JSON. In case that authenticated customer has access to multiple companies use keyword argument
-`token=token_of_company_with_given_analysis`
-
-.. code-block:: python
-
-    client.export_analysis('funnel', {
-        'analysis_id': '2f86608f-24f5-11e3-9950-c48508494cf5'
+    data = client.export_analysis('funnel', {
+        'analysis_id': '2f86608f-24f5-11e3-9950-c48508494cf5',
+        'format': 'native-json',
+        'timezone': 'UTC',
     })
 
-will return
+The data could contain
 
 .. code-block:: python
 
@@ -181,3 +146,71 @@ will return
             "property": "price"
         }
     }
+
+
+Segmentation result
+-------------------
+
+You can also export the result of a segmentation for a specific customer
+(whom you need to specify either at initialization, or using the `identify` method).
+It is necessary to authenticate during initialization of the client (see above).
+
+.. code-block:: python
+
+    client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
+                       secret='fedcba09-8765-4321-fedc-ba0987654321',
+                       customer='john123')
+
+    segment = client.segment_for('11112222-3333-4444-5555-666677778888',
+                                 timezone='UTC', timeout=0.5)
+
+The result is the segmentation name, a string like `'Heavy payer'`. In case the customer doesn't belong to any
+defined segment or their segmentation could not be determined within the given timeout, the method will return `None`.
+The `timezone` and `timeout` parameters are optional with the defaults as in the example.
+
+
+Transport types
+---------------
+
+By default the client uses a simple non-buffered synchronous transport. The three available transport types are:
+* `NullTransport` - No requests, useful for disabling tracking in the Infinario constructor.
+* `SynchronousTransport` - (default) Most operations are blocking for the time of a request to the Infinario API
+* `AsynchronousTransport` - Most operations are non-blocking (see the code for more information),
+    buffered and using a single worker thread. Infinario client must be closed when no more data is to be tracked.
+    **We recommend against using the AsynchronousTransport, as it cannot be guaranteed the data will be sent.**
+    Data loss can for example happen in various events of system failure or even due to misuse.
+    If you would like to track data from your code asynchronously, consider creating your own asynchronous workers
+    using a library such as celery and use the SynchronousTransport to send the data from there.
+
+Example of choosing `AsynchronousTransport`:
+
+.. code-block:: python
+
+    from infinario import Infinario, AsynchronousTransport
+
+    client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
+                       transport=AsynchronousTransport)
+
+    # ...
+
+    client.close()
+
+
+Using on the command line
+-------------------------
+
+The python client also has a command-line interface that allows to call its essential functions:
+
+.. code-block:: sh
+
+    TOKEN='12345678-90ab-cdef-1234-567890abcdef'
+    CUSTOMER='john123'
+
+    # Track event
+    ./infinario.py track "$TOKEN" "$CUSTOMER" purchase --properties product=bottle amount=5
+
+    # Update customer properties
+    ./infinario.py update "$TOKEN" "$CUSTOMER" first_name=John last_name=Smith
+
+    # Get HTML from campaign
+    ./infinario.py get_html "$TOKEN" "$CUSTOMER" "Banner left"
