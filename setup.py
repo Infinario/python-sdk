@@ -5,7 +5,7 @@ from setuptools import setup
 setup(
     name='infinario',
     py_modules=['infinario'],
-    version='1.0.0',
+    version='2.0.1',
     install_requires=['requests>=2.2.1'],
     description='Infinario Python SDK',
     url='https://github.com/infinario/python-sdk',
