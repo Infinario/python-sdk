@@ -35,6 +35,14 @@ with the Infinario project secret (found in the Overview screen) as the `secret`
     client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
                        secret='fedcba09-8765-4321-fedc-ba0987654321')
 
+In case you are tracking your data to an instance other than `cloud.infinario.com`, you need to specify the
+API where data should be sent. Please consult our support to find out the exact URI.
+
+.. code-block:: python
+
+    client = Infinario('12345678-90ab-cdef-1234-567890abcdef',
+                       target='https://api.infinario.com/')
+
 
 Identifying the customer
 ------------------------
