@@ -73,10 +73,10 @@ class NullTransport(object):
     def __init__(self, *_args, **_kwargs):
         pass
 
-    def send_and_receive(self, url, message, no_raise=False, timeout=None):
+    def send_and_receive(self, service, message, no_raise=False, timeout=None):
         pass
 
-    def send_and_ignore(self, url):
+    def send_and_ignore(self, service, message):
         pass
 
 
@@ -134,8 +134,8 @@ class SynchronousTransport(object):
         # always non-silent, as the result is used
         return self._send(service, message, no_raise=no_raise, timeout=timeout)
 
-    def send_and_ignore(self, url, message):
-        self._send(url, message)
+    def send_and_ignore(self, service, message):
+        self._send(service, message)
 
 
 class _WorkerData(object):
